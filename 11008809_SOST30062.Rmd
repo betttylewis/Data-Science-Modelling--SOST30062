@@ -1,0 +1,165 @@
+---
+title: "Predicting Research Impact in Social Science Literature"
+author: 'Student Number: 11008809'
+date: "SOST30062 Data Science Modelling"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+setwd("C://R_AST")
+getwd()
+library(tinytex)
+```
+
+
+**Introduction**
+
+&nbsp;
+
+Drawing on 3 data sets from Open Alex, this report uses machine learning models to predict how highly cited a paper will be. A data set composed of education paper attributes is used to train models, given its distribution with the outcome variable and the 'inter-disciplinary roots' of the sub-field of education (Lovakov, A., & Yudkevich, M., 2023). Conversely, data sets for sociology and development papers will be used to test models. Citation outcomes are measured by the variable 'log_cited_by_count' in all three data sets. This takes the log of citation counts to reduce the right skew found in raw citation counts, while the continuous nature of this variable makes it appropriate for later employed continuous model types. Furthermore, this variable found no missingness in training or testing data sets. The models constructed play a range of roles in capturing patterns in citation distribution. First, an elastic net model was fitted to the training data, followed by an adaptive LASSO (Least Absolute Shrinkage and Selection Operator) model, and finally, boosting using the XGBoost algorithm. Using a combination of linear regularised regression models and non-linear ensemble methods illuminates key variables for both the strength and direction of their coefficients and their overall variable importance. The over-arching aim of this report is to uncover hidden patterns in citation counts, answering the research question of whether paper-level, journal-level, or author-level attributes will be most significant in predicting how highly cited a paper will be. 
+
+&nbsp;
+
+**Data and Features**
+
+&nbsp;
+
+The data sets used in this report cover the attributes of social science research papers in the fields of education, sociology and political sciences, and development. The distribution of the log of citation counts by sub-field is visualised in figure 1. This illustrates that, despite taking a log-transformation of citation counts, a slight right skew persists in all three subfields, particularly in the development data set. Lovakov and Yudkevich (2023) posit that education research is multidisciplinary in its roots, performed by academics from diverse backgrounds to draw on theories and methods learnt from a range of disciplines (p.890). Given its diverse research foundation, less skewed relationship with the outcome variable, and that it is the largest of the three data sets, education is chosen for model training. These features make it more representative of out-of-model data, training models to be applied across disciplines.
+
+The models used in this report, elastic net, adaptive LASSO, and boosting, all perform automatic variable selection and thus a large proportion of variables in the data set are kept for the modelling process. These models also handle correlated variables more efficiently than ordinary least squares regression (OLS), permitting similar variables to remain in the model together. This allows for statistical analysis to illuminate relevant variables and their relationships, rather than selecting parameters arbitrarily or biasing findings towards existing theoretical research in variable importance. That said, some variables were removed to allow for a smoother modelling process. Identifier variables, such as author ID, lack predictive power, and were removed prior to modelling. Furthermore, variables requiring text analysis such as abstracts or titles were removed as this is beyond the scope of the models employed in this report. The variable fwci represents field-weighted citation impact, this calculated using the number of citations a paper receives in its first four years (Open Alex, 2026). Given its similarity with the outcome variable, which takes the log of the citation counts, the variable is removed before modelling. If kept in the data set, it would likely create optimistic bias in model estimates and dominate variable importance measures. Furthermore, variables with more than 50% missingness were removed prior to modelling. This mainly included author attribute variables beyond author 3, which were missing for the majority of papers, and thus more likely to generate noise than predictive signal in the modelling process. Following this, any remaining missingness was treated. Missing values for structural absences, such as where there was no second author for a paper, were replaced with 0. Genuine missing data points were replaced with the training mean for that variable, this preventing leakage from the test sets in pre-processing and the removal of entire rows which reduces the variation of data sets.
+
+However, as the last author listed in a research paper is typically the most senior researcher, a variable was mutated to retain the last author attributes for each paper. This captures variation in citation counts explained by the attributes and rank of the last author. Further mutation was employed to transform categorical variables into dummy variables, with one level omitted to prevent the dummy variable trap. For computational speed and efficiency, only a few relevant categorical variables were kept. Furthermore, given the dominance of papers written by American authors and published in English, these variables were binarised, with non-American written papers, and papers not written in English grouped into a single dummy for each variable. Despite the removal of author attribute variables beyond author 3, following the mutation of dummy variables, author-level variables continue to dominate the count of predictors entering the model.
+
+Finally, remaining variables were standardised. This process converted each variable's mean to 0 and standard deviation to 1, preventing larger-scale variables from receiving larger penalties in regularisation to follow.
+
+&nbsp;
+
+**Modelling**
+
+&nbsp;
+
+Regularised regression works to improve the performance of OLS regression on unseen data by sacrificing an increase in bias to decrease variance. First, an elastic net model was constructed, this a form of regularised regression which combines the coefficient penalties of ridge and LASSO regression. Ridge regression gives an L2 penalty to the squared value of coefficients, whereas LASSO regression gives an L1 penalty to the absolute value of coefficients. Combining these penalties allows elastic net to gain stability from ridge while performing LASSO’s variable selection. The combination of these penalties is tuned by the hyper-parameter alpha, while lambda controls the overall strength of coefficient penalties. Both values are selected through 10-fold cross-validation on the training set. However, an alpha level of 1 is selected in cross-validation, this representative of a pure LASSO model. This indicates that a pure LASSO penalty outperforms any mixture of L1 and L2 penalties combined, making the elastic net model effectively interchangeable with a regular LASSO model. For this data, ridge's stability does not improve on the predictive power of a pure LASSO model.
+
+The elastic net model keeps 27 of 71 predictor variables within the model. These are made up of a mixture of 7 paper-level, 2 journal-level, and 18 author-level variables. This is roughly proportional to the variable counts which entered the model. The strength of coefficients more successfully illuminates which variable type has the most predictive power. The top 5 variables by coefficient strength were: 'author_1_cited_by_count' = 0.099, 'last_auth_from_US' = 0.066, 'auth1_from_US' = 0.049, 'journal_h_index' = 0.043, and 'author_2_cited_by_count' = 0.032. Holding all other variables constant, an increase of 1 citation in the total citations received by the first author is expected to increase the log citation count by 0.099. For the second author, this sees an expected increase of 0.032 log citations. If the last author is from America, this is expected to increase log citations by 0.066, whereas a first author from America is associated with an increase in log citations of 0.049. The h-index measures the impact of a researcher or institution's work, calculated using publication and citation counts (Hirsch, J.E., 2005, p.16569). For this data set, a one unit increase in the h-index for the journal is associated with an increase in log citations of 0.043. 
+
+In all, elastic net coefficients posit that author-level variables are the strongest in influencing citation counts. These statistical findings exemplify the importance of the existing citation count of authors in drawing in further citations. The Matthew effect explains that academic prestige mechanisms self-perpetuate to benefit already eminent scientists (Merton, R.K., 1968, p.57). In this case, well established journals, or authors with existing high citation counts attract further citations and academic praise, while lesser known journals and authors are left behind. Furthermore, the strong favouritism for American authors expressed by their positive relationship with the outcome variable provides statistical evidence for Altbach's (2006) explanation of the bibliometric system. He argues that the system itself was invented to serve American scholarship, and remains biased to American authors who are favoured in citation counts (p.4). 
+
+To further investigate which variables drive citation count prediction, an adaptive LASSO model was constructed. This follows cross-validation’s preference to LASSO regression in elastic net modelling, furthering findings through adaptive LASSO’s variable-specific penalty system. This more strictly penalises variables with smaller initial coefficients while giving smaller penalty weights to variables with larger coefficients to ensure they are retained in the selection process. Adaptive LASSO is said to possess the 'oracle property', whereby with enough observations, the model perfectly selects the true variables of the underlying model (Zou, H., 2006, p.1420). This enhances the prior findings of elastic net's pure LASSO model, producing a more parsimonious model with only the true key variables in driving citation count.
+
+To favour a more simplistic model, the cross-validated value of lambda was taken to one standard error. This reduces more coefficients to 0, producing a model with only the most important variables. This parameter reduction prevents overfitting, allowing the model to generalise better to new subfields as variance reduces. Following adaptive LASSO's stricter variable selection, only 4 predictor variables of the 71 inputted remained with non-zero coefficients. These are: ‘journal_h_index’ = 0.009, ‘author_1_cited_by_count’ = 0.091, ‘auth_1_from_US’ = 0.025, ‘last_auth_from_US’ = 0.071. These variables and coefficients are very similar to those found in elastic net, given its alpha value of 1 which made it equitable to a regular LASSO model. The fifth strongest variable found in prior modelling, ‘author_2_cited_by_count’, is missing from the adaptive LASSO model, meaning that following the assignment of adaptive weights, this variable was not large enough to be retained. Holding all other variables constant, papers with a US based first author are associated with an increase in log citations of 0.025, whereas a US based last author is associated with an increase of 0.071 in log citations. This is consistent with the previously found positive relationship between authors from America and the log citation count, this reinforcing the predictive power of author-level variables and Altbach's (2006) 'tyranny of citations'.
+
+Following adaptive LASSO, an ensemble model was built to highlight the most important variables by rank in influencing citation count. Boosting involves fitting hundreds of trees, each to the residuals of previous trees to form a powerful predictor. The hierarchical nature of trees allows boosting to automatically model interactions between variables and capture non-linear relationships. This provides an insightful alternative to the previously applied linear models. Prior to modelling, boosting has 4 hyper-parameters to be tuned by 10-fold cross-validation. The number of trees, the shrinkage rate, the sub-sampling fraction, and tree-depth. While a larger number of trees with a greater depth reduce training error, this risks over fitting where fully grown trees capture noise from the training set. Optimal values are therefore cross-validated in a grid-search which tests combinations of hyper-parameters to find the mix which produces the lowest RMSE. Modelling for this report was undertaken using the XGBoost algorithm for its speed in handling large datasets.
+
+Variable importance measures how much each predictor contributes to reducing error or impurity across trees, with the most important variables often found high up the tree and on large nodes. The model produces 59 variables with non-zero importance. While regularisation methods produce coefficients which measure the direction and magnitude of variables, ensemble methods such as boosting provide relative importance metrics while capturing non-linear relationships and interactions. The top 5 variables ranked by variable importance are 'author_1_cited_by_count', 'referenced_works_count', 'author_2_h_index', 'journal_h_index' and 'auth1_from_US'. A new variable ‘referenced_works_count’, not previously selected by regularisation models, emerges here. This is accounted for by the methodological differences between modelling techniques. Penalised regression models favour sparse, parsimonious models, removing correlated predictors. Conversely, the non-linear nature of ensemble methods such as boosting allow for complex relationships between variables to be captured, highlighting the role of otherwise hidden key variables. The variable 'author_1_cited_by_count' is ranked as most important in the boosting model, this consistent with its large coefficients in elastic net and adaptive LASSO. Moreover, 'auth1_from_US' and ‘journal_h_index’ also appear in all 3 models, suggesting that both the journal's h-index and the first author's country provide stable predictive value across linear and non-linear models. While boosting ranks variables across paper, journal, and author-level variables within the top 5 most important variables, author-level variables continue to dominate model outputs, here in both frequency and by rank. Furthermore, different modelling techniques consistently find that having authors from America is an important predictor in citation rate. This aligns with network analysis of international collaboration trends, which finds that while the USA remains central in the network, institutions within the USA are more likely to collaborate domestically than those outside of the USA, who are more likely to favour increased international collaboration (Han, Pi. et al., 2014, p.53). Altbach (2006) explains that this process of 'American insularity' acts to bias citation counts further towards American authors (p.4).
+
+&nbsp;
+
+**Results**
+
+&nbsp;
+
+Following the modelling procedure, all 3 models were tested on sociology and development data sets. This evaluates the strength of models in predicting how highly cited a paper will be on out-of-sample data. This report uses two performance metrics - root mean square error (RMSE) and R-squared (R²). While RMSE measures how far the model's predictions are from the true citation count for a paper on average, R² explains how much variation in the outcome variable is explained by the model's predictions. Together, these metrics give a holistic view of how well the model performs on unseen data. This is displayed in table 1 below.
+
+&nbsp;
+
+```{r evaluation table, echo = FALSE, message = FALSE, warning = FALSE}
+library(knitr)
+library(kableExtra)
+results_table <- data.frame(
+  Model = c("Elastic Net", "Elastic Net",
+            "Adaptive LASSO", "Adaptive LASSO",
+            "Boosting", "Boosting"),
+   Metric = c("RMSE", "R-Squared",
+              "RMSE", "R-Squared",
+               "RMSE", "R-Squared"),
+  `Test 1 - Sociology` = c(0.83, -1.54,
+                           0.84, -1.63,
+                           0.69, -0.77),
+  `Test 2 - Development` = c(2.23, -4.20,
+                             2.28, -4.43,
+                             2.07, -3.50))
+kable(
+  results_table,
+  caption = "Predictive Performance of Models",
+  digits = 2,
+  align = "lccc",
+  booktabs = TRUE,
+   col.names = c("Model", "Metric", "Test 1 - Sociology", "Test 2 - Development")) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    latex_options = c("hold_position")
+  ) %>%
+  collapse_rows(columns = 1, valign = "middle")
+```
+
+&nbsp;
+
+Values in table 1 are on the same log-scale as the outcome variable used. Consequently, a sociology RMSE of 0.84 for adaptive LASSO means that predictions are typically within 0.84 log-citations of the true number of citations a paper has. Given the parsimony of the model, this is a reasonable estimation. An RMSE of 2.28 for adaptive LASSO on the development data set suggests greater inaccuracy. On average, predictions are within 2.28 log-citations from the true number of citations on a development paper. RMSE reduces slightly in the elastic net model for both test sets, reflecting its retention of 27 variables compared to adaptive LASSO's 4. This sacrifice of parsimony allows the model to capture marginally more signal than more simplistic models. RMSE reduces again in boosting using the XGBoost algorithm. This ensemble method more effectively models predicted citation rates on unseen data than regularised regression models. The sequential nature of boosting, which fits trees to residuals, makes for a powerful predictor of citation count as the ensemble iteratively improves. This also reduces variance which allows boosting models to make more accurate out-of-sample predictions - where each tree is fitted to a different residual signal, this lowers correlation among members of the ensemble. That said, small differences in RMSE among models suggest that the linear signal captured by regularised regression models exists in the data, while this is just further refined by boosting. 
+
+R² values present significantly less promising findings for the predictive performance of all models. All models returned negative R² values on both the sociology and the development data sets - each performing worse than a baseline model predicting the mean outcome value for each observation. As the models used in this report perform automatic variable selection to reduce model complexity and overfitting, poor R² values are instead attributed to provided features failing to explain variation in the test sets. While models captured some structure in the training data, this does not generalise to testing data, whereby models struggle to explain the variation in the outcome variable through predictions. The relationship between author prestige, US status, and citation counts captured in the modelling of training does not alone explain the variation in citation counts in sociology and development sub-fields.
+
+While still negative, boosting produced the highest R² values of the models, this consistent with its lowest RMSE values. This suggests that the non-linear relationships and interactions between variables captured by this ensemble method did comparatively improve predictive power, despite this remaining weak overall. Furthermore, while RMSE and R² reduce with each model, all models perform consistently worse on the development data set than the sociology data set. This suggests that poor performance is not a modelling error requiring greater complexity, but reflective of a greater interdisciplinary difference encoded in the training and testing sets. Greater structural differences in the development set make the relationships learned during training even less transferable to the development data set than to sociology. This merits further discussion into the development data set.
+
+&nbsp;
+
+**Discussion**
+
+&nbsp;
+
+The right skew found in the development data set highlighted its unique distribution with the outcome variable from early exploratory analysis (Figure 1). while Lovakov and Yudkevich (2023) note that education is multidisciplinary in its roots, referring to the role of sociology and other social science disciplines in informing the theoretical constructs that education studies form (p.891), development studies are never mentioned as holding influence. Loxley (2004) posits that development studies are inherently distinctive to other social sciences for their shifted perspective which focuses purely on outcomes in the developing world (p.26). This encourages research at not only the regional or national level, but at the international level (ibid, p.28). In linear model training, authors from the US had a consistent positive relationship with citation count, with this variable ranked within the top 5 most important predictors in boosting. This lends to the question of whether the international nature of development studies and the authors which contribute to it reduce similarities between this data set and the training set. This renders models trained on other disciplines, such as education, non-applicable in understanding which features make a development paper more highly cited.
+
+In conclusion, across models, author-level variables were found to have the most predictive power in anticipating how highly cited a paper would be. Along with the journal-level h-index, these variables were found to have both large coefficients in regularisation models and high variable importance in boosting. While both academic prestige and author country attributes dominate findings, the two mutually reinforce each other in the Matthew effect, this favouring US authors, who benefit from both geographic bias and cumulative advantage. The conclusions of this report remain limited by bias found in the outcome variable, whereby older papers which have had longer to accrue citations are favoured. Furthermore, the report is limited by the selection of which data sets are assigned to training and testing. Without replicating the entire modelling process to train on each data set, it is impossible to evaluate whether overall RMSE or R² values would improve from training on different data or parameters. While author country variables were dummified to US/not US for computational efficiency, given the variable's predictive power, further research should focus on investigating variance in country by author. If Loxley's (2004) hypothesis about the international breadth of development research reigns true, then binary country flags fail to capture this, this accounting for poor performance on the development data set. The findings of this report and inconsistencies of model performance on development call to Rechavi's (et al., 2024) urge to diversify and enrich academia beyond Western-centric research practices (p.72). This raises concern - how can the social sciences learn from international findings if US domination is so entrenched that it even renders statistical models non-applicable to the disciplines that seek to go beyond this?
+
+
+&nbsp;
+
+**Bibliography**
+
+&nbsp;
+
+Altbach, P. (2006). ‘The tyranny of citations’, *International Higher Education*, 43, p.3-5. Available at: https://ejournals.bc.edu/index.php/ihe/article/download/7889/7040 (Accessed: 05 May 2026).
+
+Han, P., Shi, J., Li, X., Wang, D., Shen, S., and Su, X. (2014). ‘International collaboration in LIS: global trends and networks at the country and institution level’, *Scientometrics*, 98, pp.53-72. Available at: https://link.springer.com/article/10.1007/s11192-013-1146-x (Accessed: 05 May 2026). 
+
+Hirsch, J.E. (2005). ‘An Index to Quantify and Individual’s Scientific Research Output’, *Proceedings of the National Academy of Sciences of the United States of America*, 102(46), pp.16569-16572. Available at: https://www.jstor.org/stable/4152261 (Accessed: 06 May 2026).
+
+Lovakov, A., Yudkevich, M. (2023). ‘The multidisciplinary roots of higher education research: An analysis of citation patterns’, *Higher Education Quarterly*, 77(4), pp.890-910. https://doi.org/10.1111/hequ.12438 . 
+
+Loxley, J. (2004). ‘What is Distinctive About International Development Studies?’, *Canadian Journal of Development Studies*, 25(1), pp.25-38. https://doi.org/10.1080/02255189.2004.9668958.
+
+Merton, R.K. (1968). 'The Matthew Effect in Science', *Science*, 159(3810), pp.55-63. https://doi.org/10.1126/science.159.3810.56.
+
+Open Alex. (2026). *Field Weighted Citation Impact (FWCI)*. Available at: https://help.openalex.org/hc/en-us/articles/24735753007895-Field-Weighted-Citation-Impact-FWCI (Accessed: 05 May 2026).
+
+Rechavi, A., Avidar, R., Roth-Cohen, O. (2024). ‘Geographical-institutional diversity and heterophily in academic research: a social network analysis of international collaboration, research communities and co-authorship in the public relations discipline’, *Atlantic Journal of Communication*, 33(1), pp.71-93. https://doi.org/10.1080/15456870.2024.2371463. 
+
+Zou, H. (2006). 'The Adaptive Lasso and Its Oracle Properties', *Journal of the American Statistical Association*, 101(476), pp.1418-1429. Available at: https://www.jstor.org/stable/27639762 (Accessed: 06 May 2026).
+ 
+
+&nbsp;
+
+**Figure 1**
+
+&nbsp;
+
+```{r distribution model, echo = FALSE, message = FALSE, warning = FALSE, fig.width = 5, fig.height = 2, fig.align = "center"}
+test_dev <- read.csv("development_final.csv")
+train_ed <- read.csv("education_final.csv")
+test_soc <- read.csv("sociology_final.csv")
+library(ggplot2)
+all_data <- rbind(
+  transform(test_soc, subfield = "Sociology"),
+  transform(test_dev, subfield = "Development"),
+  transform(train_ed, subfield = "Education"))
+ggplot(all_data, aes(x = log_cited_by_count, fill = subfield)) +
+  geom_density(alpha = 0.4) +
+  labs(title = "Log-Transformed Citation Distribution by Subfield") +
+  theme(plot.title = element_text(size = 11))
+```
+
+
+
+
